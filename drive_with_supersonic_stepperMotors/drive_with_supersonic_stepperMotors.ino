@@ -1,4 +1,5 @@
 #include <Stepper.h>
+// THIS IS NOT WHAT WE ARE USING, DO NOT INCLUDE THIS
 
 const int PIN_TRIG = 9;
 const int PIN_ECHO = 10;
