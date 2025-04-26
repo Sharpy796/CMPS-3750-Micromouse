@@ -253,15 +253,15 @@ class Maze{
 };
 
 // PINS
-//the right motor will be controlled by the motor A pins on the motor driver
-#define PWMA 13
-#define AIN2 12
-#define AIN1 11
+// the right motor will be controlled by the motor A pins on the motor driver
+#define PWMA 13 // speed control pin on the motor driver for the right motor
+#define AIN2 12 // control pin 2 on the motor driver for the right motor
+#define AIN1 11 // control pin 1 on the motor driver for the right motor
 
-//the left motor will be controlled by the motor B pins on the motor driver
-#define BIN1 10
-#define BIN2 9
-#define PWMB 8
+// the left motor will be controlled by the motor B pins on the motor driver
+#define BIN1 10 // control pin 1 on the motor driver for the left motor
+#define BIN2 9  // control pin 2 on the motor driver for the left motor
+#define PWMB 8  // speed control pin on the motor driver for the left motor
 
 #define TRIG_LEFT 7
 #define ECHO_LEFT 6
@@ -275,6 +275,9 @@ float distanceFront;
 #define ECHO_RIGHT 2
 float distanceRight;
 
+float error = 0.0f;
+#define ERROR_LIMIT 1.0f // centimeters
+
 #define SWITCH 1
 
 // WALLS
@@ -285,7 +288,7 @@ Maze maze = Maze();
 bool hasReachedTheEnd = false;
 
 // DIRECTIONS
-int leftDirection = 0; // -1 for backward, 0 for stopped, 1 for forward
+int leftDirection = 0;  // -1 for backward, 0 for stopped, 1 for forward
 int rightDirection = 0; // -1 for backward, 0 for stopped, 1 for forward
 enum Orientation {
   NORTH = 1,
@@ -309,29 +312,26 @@ int curY = START_Y;
 int goalX = END_X;
 int goalY = END_Y;
 
-// DISTANCES (Centimeters)
-#define CELL_SIZE 18
-// TODO: Fine-tune this number to get it to rotate 90 degrees
-double ROTATION_SIZE = (11.0*PI)/4.0;
+// DISTANCES
+#define CELL_SIZE 18 // Centimeters
+double ROTATION_SIZE = (11.25*PI)/4.0; // TODO: Fine-tune this number to get it to rotate 90 degrees
 #define WALL_DISTANCE_AWAY 6.0f
 #define SPEED_SOUND .0343
 
-// motors won't run at or below 50%
-#define POWER_PERCENT 0.51
-// this number is 0 - 255, which represents 0% - 100% power
-const double POWER = 255.0*POWER_PERCENT;
+#define POWER_PERCENT 0.51 // motors won't run at or below 50%
+const double POWER = 255.0*POWER_PERCENT; // this number is 0 - 255, which represents 0% - 100% power
 #define RPS 2.5
 const double SPEED = POWER_PERCENT*RPS; // rotations per second
-// centimeters
-#define WHEEL_DIAMETER 6.5
+#define WHEEL_DIAMETER 6.5 // centimeters
 const double WHEEL_CIRCUMFERENCE = PI*WHEEL_DIAMETER; //2*pi*radius = pi*diameter (centimeters)
 const double CMPS = SPEED*WHEEL_CIRCUMFERENCE; // centimeters per second
 const double SECONDS_PER_CENTIMETER = 1.0/CMPS; // seconds per centimeter
 
 const double DRIVE_TIME_CONST = SECONDS_PER_CENTIMETER*CELL_SIZE*1000;
 const double TURN_TIME_CONST = SECONDS_PER_CENTIMETER*ROTATION_SIZE*1000;
+#define NUDGE_TIME_CONST 125
 
-#define STOP_DELAY 25
+#define STOP_DELAY 20
 bool hasDoneStartThings = false;
 
 void printData() {
@@ -459,12 +459,12 @@ void rightMotor(int motorPower){
     rightDirection = -1;
   } else { // if the motor should stop
     // briefly move the motor in the opposite direction to prevent it from drifting after stopping
-    // if (rightDirection > 0) {
-    //   rightMotor(-POWER/POWER_PERCENT);
-    // } else if (rightDirection < 0) {
-    //   rightMotor(POWER/POWER_PERCENT);
-    // }
-    // delay(STOP_DELAY);
+    if (rightDirection > 0) {
+      rightMotor(-POWER/POWER_PERCENT);
+    } else if (rightDirection < 0) {
+      rightMotor(POWER/POWER_PERCENT);
+    }
+    delay(STOP_DELAY);
     digitalWrite(AIN1, LOW);
     digitalWrite(AIN2, LOW);
     rightDirection = 0;
@@ -482,13 +482,13 @@ void leftMotor(int motorPower) { // function for driving the left motor
     digitalWrite(BIN2, HIGH);
     leftDirection = -1;
   } else { // if the motor should stop
-    // // briefly move the motor in the opposite direction to prevent it from drifting after stopping
-    // if (leftDirection > 0) {
-    //   leftMotor(-POWER/POWER_PERCENT);
-    // } else if (leftDirection < 0) {
-    //   leftMotor(POWER/POWER_PERCENT);
-    // }
-    // delay(STOP_DELAY);
+    // briefly move the motor in the opposite direction to prevent it from drifting after stopping
+    if (leftDirection > 0) {
+      leftMotor(-POWER/POWER_PERCENT);
+    } else if (leftDirection < 0) {
+      leftMotor(POWER/POWER_PERCENT);
+    }
+    delay(STOP_DELAY);
     digitalWrite(BIN1, LOW);
     digitalWrite(BIN2, LOW);
     leftDirection = 0;
@@ -497,6 +497,7 @@ void leftMotor(int motorPower) { // function for driving the left motor
 }
 
 void driveForward() {
+  Serial.println("Driving!");
   rightMotor(POWER);
   leftMotor(POWER);
 }
@@ -667,6 +668,49 @@ void driveToNextCell() {
   driveToNextCellAtOrientation(maze.findNextStep(curX,curY,goalX,goalY));
 }
 
+void nudgeLeft() {
+  turnLeft();
+  delay(NUDGE_TIME_CONST);
+  stopMoving();
+}
+void nudgeRight() {
+  turnRight();
+  delay(NUDGE_TIME_CONST);
+  stopMoving();
+}
+void nudgeBack() {
+  driveBackward();
+  delay(NUDGE_TIME_CONST);
+  stopMoving();
+}
+
+float calculateError(float dist1, float dist2) {
+  return dist1 - dist2;
+}
+
+void correctError() {
+  detectAllWalls();
+
+  if (walls[1]) {
+    error = distanceFront;
+    if (abs(error) >= ERROR_LIMIT*2) { // Too far forward
+      nudgeBack();
+    }
+  }
+  
+  detectAllWalls();
+  if (walls[0] && walls[2]) { // If there are walls on either side of us...
+    error = calculateError(distanceLeft, distanceRight); // negative if too far left, positive if too far right
+    if (abs(error) >= ERROR_LIMIT) {
+      if (error < 0) { // too far left
+        nudgeRight();
+      } else if (error > 0) { // too far right
+        nudgeLeft();
+      }
+    }
+  }
+}
+
 /********************************************************************************/
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -698,10 +742,12 @@ void loop() {
   if (!hasDoneStartThings) {
     printData();
     hasDoneStartThings = true;
-    delay(3000);
+    delay(2000);
   }
   
+  // MAIN LOOP
   senseMaze();
   driveToNextCell();
+  correctError();
   delay(1000);
 }
