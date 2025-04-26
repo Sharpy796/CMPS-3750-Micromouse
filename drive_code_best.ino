@@ -314,7 +314,7 @@ int goalY = END_Y;
 
 // DISTANCES
 #define CELL_SIZE 18 // Centimeters
-double ROTATION_SIZE = (11.25*PI)/4.0; // TODO: Fine-tune this number to get it to rotate 90 degrees
+double ROTATION_SIZE = (13*PI)/4.0;
 #define WALL_DISTANCE_AWAY 6.0f
 #define SPEED_SOUND .0343
 
