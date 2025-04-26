@@ -314,12 +314,14 @@ int goalY = END_Y;
 
 // DISTANCES
 #define CELL_SIZE 18 // Centimeters
-double ROTATION_SIZE = (13*PI)/4.0;
+double ROTATION_SIZE = (13.0*PI)/4.0;
 #define WALL_DISTANCE_AWAY 6.0f
 #define SPEED_SOUND .0343
 
 #define POWER_PERCENT 0.51 // motors won't run at or below 50%
 const double POWER = 255.0*POWER_PERCENT; // this number is 0 - 255, which represents 0% - 100% power
+#define EXTRA_POWER 0.05 // extra power to account for right wheel being slow
+const double POWER_R = 255.0*(POWER_PERCENT+EXTRA_POWER);
 #define RPS 2.5
 const double SPEED = POWER_PERCENT*RPS; // rotations per second
 #define WHEEL_DIAMETER 6.5 // centimeters
@@ -330,6 +332,7 @@ const double SECONDS_PER_CENTIMETER = 1.0/CMPS; // seconds per centimeter
 const double DRIVE_TIME_CONST = SECONDS_PER_CENTIMETER*CELL_SIZE*1000;
 const double TURN_TIME_CONST = SECONDS_PER_CENTIMETER*ROTATION_SIZE*1000;
 #define NUDGE_TIME_CONST 125
+bool outOfBounds = false;
 
 #define STOP_DELAY 20
 bool hasDoneStartThings = false;
@@ -350,9 +353,8 @@ void printData() {
   Serial.println("------------------------");
 }
 
-
 /********************************************************************************/
-float updateSensor(int TRIG, int ECHO) {
+float readSensor(int TRIG, int ECHO) {
   // Use sensors to recieve a signal
   digitalWrite(TRIG, LOW);
   delayMicroseconds(2);
@@ -365,9 +367,9 @@ float updateSensor(int TRIG, int ECHO) {
 }
 
 void updateAllSensors() {
-  distanceLeft = updateSensor(TRIG_LEFT, ECHO_LEFT);
-  distanceFront = updateSensor(TRIG_FRONT, ECHO_FRONT);
-  distanceRight = updateSensor(TRIG_RIGHT, ECHO_RIGHT);
+  distanceLeft = readSensor(TRIG_LEFT, ECHO_LEFT);
+  distanceFront = readSensor(TRIG_FRONT, ECHO_FRONT);
+  distanceRight = readSensor(TRIG_RIGHT, ECHO_RIGHT);
 }
 
 bool detectWall(float distance) {
@@ -382,18 +384,17 @@ bool detectWall(float distance) {
 }
 
 bool detectWall(int TRIG, int ECHO) {
-  return detectWall(updateSensor(TRIG, ECHO));
+  return detectWall(readSensor(TRIG, ECHO));
 }
 
 void detectAllWalls() {
-  updateAllSensors(); // (redundant)
+  updateAllSensors(); // (redundant? It doesn't seem like it)
   walls[0] = detectWall(distanceLeft);
   walls[1] = detectWall(distanceFront);
   walls[2] = detectWall(distanceRight);
 }
 
 void senseMaze() {
-  // updateAllSensors(); // oops, updateAllSensors() happens in detectAllWalls()
   detectAllWalls();
   switch (currentOrientation) {
     case 1: // North
@@ -498,19 +499,19 @@ void leftMotor(int motorPower) { // function for driving the left motor
 
 void driveForward() {
   Serial.println("Driving!");
-  rightMotor(POWER);
+  rightMotor(POWER_R);
   leftMotor(POWER);
 }
 void driveBackward() {
-  rightMotor(-POWER);
+  rightMotor(-POWER_R);
   leftMotor(-POWER);
 }
 void turnLeft() {
-  rightMotor(POWER);
+  rightMotor(POWER_R);
   leftMotor(-POWER);
 }
 void turnRight() {
-  rightMotor(-POWER);
+  rightMotor(-POWER_R);
   leftMotor(POWER);
 }
 void stopMoving() {
@@ -605,7 +606,7 @@ void shiftPosition(int cells, Orientation direction) {
 }
 
 bool detectOutOfBounds() {
-  bool outOfBounds = false;
+  outOfBounds = false;
   if (curX < 0) {
     Serial.println("X OUT OF BOUNDS -- LESS THAN 0");
     outOfBounds = true;
@@ -664,7 +665,6 @@ void driveToNextCellAtOrientation(int goalOrientation) {
 }
 
 void driveToNextCell() {
-  // enum Orientation goalOrientation = compareCellOrientation(0,0,0,1);
   driveToNextCellAtOrientation(maze.findNextStep(curX,curY,goalX,goalY));
 }
 
@@ -748,6 +748,6 @@ void loop() {
   // MAIN LOOP
   senseMaze();
   driveToNextCell();
-  correctError();
+  correctError(); // May or may not work
   delay(1000);
 }
